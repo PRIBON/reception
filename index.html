@@ -26,6 +26,12 @@ function __cdnFB(u){ document.write('<scr'+'ipt src="'+u+'"></scr'+'ipt>'); }
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
 
+<!-- Google Identity Services : connexion 2FA du responsable (bouton Admin discret) -->
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+
+<!-- Google Identity Services : connexion Google du responsable (entrepôt) -->
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+
 <style>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body {
@@ -188,10 +194,10 @@ const STORE = { code: "MONTREUIL", label: "Pribon Montreuil", appName: "PRIBON M
 // Logo PRIBON (affiché à la connexion). Repli sur emoji si l'image ne charge pas.
 const LOGO_URL = "https://static.wixstatic.com/media/bbaec6_145fdeb1127d41eab38bb1c4fb0bee94~mv2.png/v1/crop/x_0,y_18,w_1772,h_570/fill/w_249,h_79,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/PRIBON_logo_generique_GF.png";
 
-// Code du RESPONSABLE de ce magasin (ouvre l'espace admin : charger les BL, voir les réceptions).
-// En clair (assumé par le CDC). Les VENDEURS, eux, n'utilisent PAS ce code : ils ont un code
-// personnel généré par le gérant (validé côté serveur). Aucun nom n'est stocké ici.
-const RESPONSABLE_CODE = "48291";
+// Le RESPONSABLE (entrepôt) ouvre l'espace admin via CONNEXION GOOGLE (pas de code).
+// La liste des emails autorisés est côté serveur (RESPONSABLE_EMAILS dans l'Apps Script).
+// Client ID OAuth Google (le MÊME que superadmin.html). Voir README étape C.
+const OAUTH_CLIENT_ID = "__CLIENT_ID.apps.googleusercontent.com__";
 
 // Webhook Google Apps Script central (validation des codes vendeur + mail + Sheet + photos).
 // LE MÊME pour tous les magasins. Voir apps_script_reception.gs
@@ -210,6 +216,7 @@ try {
 } catch(e) { console.error("Firebase init:", e); }
 
 const APPS_SCRIPT_READY = () => APPS_SCRIPT_URL && !APPS_SCRIPT_URL.includes("__A_REMPLIR__");
+const OAUTH_READY = () => OAUTH_CLIENT_ID && !OAUTH_CLIENT_ID.includes("__");
 
 // Réduit une image (max 1600px, JPEG 0.8) pour un upload léger, puis renvoie {base64, name}
 function resizeImageToBase64(file, maxDim){
@@ -407,16 +414,51 @@ function Brand(){
     : <div className="logo">📦 PRIBON</div>;
 }
 
+// Connexion Google du responsable (entrepôt). Vérifie l'email côté serveur (RESPONSABLE_EMAILS).
+function ResponsableLogin({ onAuthed }){
+  const ref=useRef(); const [err,setErr]=useState(""); const [busy,setBusy]=useState(false);
+  useEffect(()=>{
+    if(!OAUTH_READY()) return;
+    let tries=0; const t=setInterval(()=>{
+      if(window.google && google.accounts && google.accounts.id){
+        clearInterval(t);
+        google.accounts.id.initialize({ client_id:OAUTH_CLIENT_ID, callback: async (resp)=>{
+          setBusy(true); setErr("");
+          try{
+            const r=await fetch(APPS_SCRIPT_URL,{ method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"},
+              body:JSON.stringify({ action:"verify-responsable", idToken:resp.credential }) });
+            const j=await r.json();
+            if(j && j.allowed) onAuthed();
+            else setErr("Accès refusé : "+((j&&j.email)||"")+" n'est pas autorisé.");
+          }catch(e){ setErr("Erreur : "+e.message); }
+          setBusy(false);
+        }});
+        try{ google.accounts.id.renderButton(ref.current,{ theme:"outline", size:"large", text:"signin_with" }); }catch(e){}
+      } else if(++tries>50) clearInterval(t);
+    },150);
+    return ()=>clearInterval(t);
+  },[]);
+  if(!OAUTH_READY()) return null;
+  return (
+    <div style={{marginTop:20,textAlign:"center"}}>
+      <div className="small-note" style={{marginBottom:8}}>Responsable / entrepôt :</div>
+      <div ref={ref} style={{display:"flex",justifyContent:"center"}}></div>
+      {busy && <div className="small-note">Vérification…</div>}
+      {err && <div className="err">{err}</div>}
+    </div>
+  );
+}
+
 function LoginScreen({ onOperator, onAdmin }){
   const [code,setCode]=useState("");
   const [err,setErr]=useState("");
   const [busy,setBusy]=useState(false);
+  const [showAdmin,setShowAdmin]=useState(false);
 
   const submit=async()=>{
     setErr("");
     const c=code.trim();
     if(c.length<4){ setErr("Entrez votre code."); return; }
-    if(c===RESPONSABLE_CODE){ onAdmin(); return; }   // code responsable -> espace admin
     setBusy(true);
     try{
       const ok=await verifyVendorCode(c);
@@ -442,6 +484,18 @@ function LoginScreen({ onOperator, onAdmin }){
         {err && <div className="err">{err}</div>}
         <div className="small-note">Votre code personnel vous est communiqué par le gérant. Il ne fonctionne que dans ce magasin.</div>
       </div>
+
+      {/* Accès responsable : discret, caché derrière "Admin". */}
+      {!showAdmin
+        ? <button className="link-btn" style={{marginTop:24,opacity:.4,fontSize:12}} onClick={()=>setShowAdmin(true)}>Admin</button>
+        : (
+          <div className="card" style={{marginTop:14}}>
+            {OAUTH_READY()
+              ? <ResponsableLogin onAuthed={onAdmin}/>
+              : <div className="small-note">Connexion responsable indisponible : OAUTH_CLIENT_ID non configuré.</div>}
+            <button className="btn-secondary" onClick={()=>setShowAdmin(false)}>Annuler</button>
+          </div>
+        )}
     </div>
   );
 }
