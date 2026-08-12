@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>PRIBON — Console Responsable</title>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+<script>
+  if (window['pdfjsLib']) window['pdfjsLib'].GlobalWorkerOptions.workerSrc =
+    'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+</script>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#f4f5f7;color:#1a1a1a;font-size:15px}
+  .header{background:#1a4d2e;color:#fff;padding:14px 22px;display:flex;justify-content:space-between;align-items:center}
+  .header h1{margin:0;font-size:19px}
+  .header .sub{font-size:12px;opacity:.85}
+  .wrap{max-width:1280px;margin:0 auto;padding:18px 22px 60px}
+  #gate{max-width:440px;margin:60px auto;background:#fff;border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.08);padding:26px;text-align:center}
+  .muted{color:#888;font-size:13px;line-height:1.5}
+  .err{color:#d32f2f;font-size:13px;margin-top:8px}
+  .ok{color:#2e7d32;font-size:13px;margin-top:6px}
+  .hidden{display:none}
+  /* Tabs */
+  .tabs{display:flex;gap:6px;border-bottom:2px solid #e6e8ec;margin-bottom:18px;flex-wrap:wrap}
+  .tab{padding:12px 20px;background:none;border:none;font-size:15px;font-weight:700;color:#777;cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px}
+  .tab.active{color:#1a4d2e;border-bottom-color:#1a4d2e}
+  /* Boutons */
+  button.btn{padding:12px 18px;font-size:15px;font-weight:700;border:none;border-radius:8px;cursor:pointer}
+  .btn-primary{background:#1a4d2e;color:#fff}
+  .btn-primary:disabled{background:#aaa;cursor:default}
+  .btn-green{background:#2e7d32;color:#fff}
+  .btn-lg{padding:16px 24px;font-size:16px}
+  input,select{font-family:inherit;font-size:15px;padding:10px 12px;border:1.5px solid #ddd;border-radius:8px;background:#fff}
+  input:focus,select:focus{outline:none;border-color:#1a4d2e}
+  label{font-size:12px;font-weight:700;color:#555;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:.03em}
+  /* Grille magasins */
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px}
+  .store-card{background:#fff;border:1.5px solid #e6e8ec;border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:10px}
+  .store-card h3{margin:0;font-size:16px;color:#1a4d2e;display:flex;justify-content:space-between;align-items:center}
+  .store-card.nocfg{opacity:.55}
+  .drop{border:2px dashed #1a4d2e;border-radius:10px;padding:16px;text-align:center;background:#f4f9f5;cursor:pointer;font-size:14px}
+  .drop:hover{background:#e9f2ec}
+  .drop.has{border-style:solid;background:#e8f5e9}
+  .field{margin-bottom:4px}
+  .badge{font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px}
+  .badge.ok{background:#e8f5e9;color:#2e7d32}
+  .badge.warn{background:#fff3e0;color:#e65100}
+  .badge.info{background:#eef2f7;color:#555}
+  .parse-note{font-size:12px;color:#555;background:#f7f9f7;border-radius:6px;padding:6px 8px}
+  .bar{position:sticky;bottom:0;background:#fff;border-top:1px solid #e6e8ec;padding:14px 22px;margin:22px -22px -60px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 -2px 8px rgba(0,0,0,.05)}
+  /* Suivi live */
+  .live-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:16px}
+  .rec{border:1.5px solid #e6e8ec;border-radius:10px;padding:12px;margin-bottom:10px}
+  .rec.draft{background:#fff8e1;border-color:#ffb300}
+  .rec.valid{background:#e8f5e9;border-color:#4caf50}
+  .pbar{background:#e6e8ec;height:9px;border-radius:5px;overflow:hidden;margin-top:8px}
+  .pfill{height:100%;background:#4caf50}
+  .since{font-variant-numeric:tabular-nums;font-weight:700;color:#e65100}
+  .card{background:#fff;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.05);padding:20px;max-width:640px}
+  .dot{width:7px;height:7px;border-radius:50%;background:#e53935;display:inline-block;animation:blink 1.2s infinite}
+  @keyframes blink{50%{opacity:.2}}
+  table{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px}
+  th,td{border:1px solid #e6e8ec;padding:6px 8px;text-align:left}
+  th{background:#f4f9f5}
+  .modal-back{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:100;padding:16px}
+  .modal-box{background:#fff;border-radius:12px;padding:20px;max-width:780px;width:100%;max-height:92vh;overflow:auto}
+</style>
+</head>
+<body>
+<div class="header">
+  <div><h1>📥 PRIBON — Console Responsable</h1><div class="sub">Suivi & chargement des BL · tous les magasins</div></div>
+  <div id="whoami" class="sub"></div>
+</div>
+
+<div id="gate">
+  <h2>Connexion responsable</h2>
+  <p class="muted">Connecte-toi avec ton compte Google autorisé (2FA gérée par Google).</p>
+  <div id="gbtn" style="display:flex;justify-content:center;margin-top:10px"></div>
+  <div class="err" id="gateErr"></div>
+</div>
+
+<div class="wrap hidden" id="app">
+  <div class="tabs">
+    <button class="tab active" data-tab="multi">📦 Chargement multi-magasin</button>
+    <button class="tab" data-tab="simple">📄 Chargement simple</button>
+    <button class="tab" data-tab="g5">📥 À réceptionner sur G5</button>
+    <button class="tab" data-tab="archives">🗄️ Réceptions archivées</button>
+    <button class="tab" data-tab="suivi">📡 Suivi live</button>
+  </div>
+  <div id="tab-multi"></div>
+  <div id="tab-simple" class="hidden"></div>
+  <div id="tab-g5" class="hidden"></div>
+  <div id="tab-archives" class="hidden"></div>
+  <div id="tab-suivi" class="hidden"></div>
+</div>
+
+<script>
+/* =========================== CONFIGURATION =========================== */
+const OAUTH_CLIENT_ID = "__CLIENT_ID.apps.googleusercontent.com__";
+const APPS_SCRIPT_URL = "__A_REMPLIR__";
+// Un objet par magasin. Colle la config Firebase de CHAQUE magasin (comme dans son index.html).
+// Laisse firebaseConfig vide ({}) pour un magasin pas encore prêt.
+const STORES = [
+  { code:"ROBESPIERRE", label:"Pribon Robespierre", firebaseConfig:{ /* apiKey, authDomain, databaseURL, projectId, appId */ } },
+  { code:"TOLBIAC",     label:"Pribon Tolbiac",     firebaseConfig:{ } },
+  { code:"BICHAT",      label:"Pribon Bichat",      firebaseConfig:{ } },
+  { code:"BELLEVILLE",  label:"Pribon Belleville",  firebaseConfig:{ } }
+];
+/* =================================================================== */
+
+let ID_TOKEN=null;
+const dbByStore={};      // code -> firebase database
+const names={};          // operatorCode -> "Prénom Nom"
+const state={};          // code -> { receptions, docs }
+let pendingNames=false;
+function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function norm(s){ return (s||"").toString().normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase().trim(); }
+function toNum(s){ if(s==null) return 0; const n=parseFloat(String(s).replace(/\s/g,"").replace(",",".")); return isNaN(n)?0:n; }
+
+/* ============================ AUTH ============================ */
+function onCredential(resp){
+  ID_TOKEN=resp.credential;
+  fetch(APPS_SCRIPT_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},
+    body:JSON.stringify({action:"verify-responsable",idToken:ID_TOKEN})})
+    .then(r=>r.json()).then(j=>{
+      if(j&&j.allowed){ start(j.email); }
+      else document.getElementById("gateErr").textContent="Accès refusé : "+((j&&j.email)||"")+" n'est pas autorisé.";
+    }).catch(e=>document.getElementById("gateErr").textContent="Erreur : "+e.message);
+}
+window.onload=function(){
+  if(OAUTH_CLIENT_ID.indexOf("__")!==-1){ document.getElementById("gateErr").textContent="Renseigne OAUTH_CLIENT_ID et APPS_SCRIPT_URL en haut du fichier."; return; }
+  const t=setInterval(()=>{ if(window.google&&google.accounts&&google.accounts.id){ clearInterval(t);
+    google.accounts.id.initialize({client_id:OAUTH_CLIENT_ID,callback:onCredential});
+    google.accounts.id.renderButton(document.getElementById("gbtn"),{theme:"filled_blue",size:"large",text:"signin_with"});
+  }},150);
+};
+
+const readyStores=()=>STORES.filter(s=>s.firebaseConfig&&s.firebaseConfig.databaseURL);
+
+function start(email){
+  document.getElementById("gate").classList.add("hidden");
+  document.getElementById("app").classList.remove("hidden");
+  document.getElementById("whoami").textContent=email;
+  // Init une app Firebase par magasin configuré
+  readyStores().forEach(s=>{
+    try{
+      const appF=firebase.initializeApp(s.firebaseConfig, s.code);
+      dbByStore[s.code]=firebase.database(appF);
+      state[s.code]={receptions:{},docs:{}};
+    }catch(e){ console.error("Firebase "+s.code, e); }
+  });
+  // Onglets
+  document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>switchTab(b.dataset.tab));
+  renderMulti(); renderSimple();
+  // Écouteurs live : réceptions + documents de chaque magasin
+  readyStores().forEach(s=>{ const db=dbByStore[s.code]; if(!db) return;
+    db.ref("receptions").on("value",snap=>{ state[s.code].receptions=snap.val()||{}; queueNames(); renderSuivi(); renderG5(); renderArchives(); });
+    db.ref("documents").on("value",snap=>{ state[s.code].docs=snap.val()||{}; renderSuivi(); renderG5(); renderArchives(); });
+  });
+  renderG5(); renderArchives();
+  setInterval(renderSuivi,1000);
+}
+function switchTab(t){
+  document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.tab===t));
+  ["multi","simple","g5","archives","suivi"].forEach(x=>document.getElementById("tab-"+x).classList.toggle("hidden",x!==t));
+}
+
+/* ============================ PARSEURS ============================ */
+function parseCSV(text){
+  const lines=text.split(/\r?\n/).filter(l=>l.trim().length);
+  if(!lines.length) return {docNumber:"",supplier:"",lines:[]};
+  const head=lines[0].split(";").map(h=>norm(h));
+  const col=(names)=>{ for(const n of names){ const i=head.indexOf(n); if(i>=0) return i; } return -1; };
+  const iType=col(["type de piece"]),iDoc=col(["numero piece"]),iEan=col(["ean"]),iRef=col(["reference"]),
+        iDes=col(["designation"]),iQte=col(["qte","qte "]),iMar=col(["marque"]),iComm=col(["commentaire"]),
+        iFam=col(["famille"]),iRay=col(["rayon"]);
+  const out=[]; let docNumber="";
+  for(let r=1;r<lines.length;r++){
+    const c=lines[r].split(";"); if(c.length<3) continue;
+    const type=(iType>=0?c[iType]:"").trim(), article=(iRef>=0?c[iRef]:"").trim(), des=(iDes>=0?c[iDes]:"").trim();
+    if(!article&&!des) continue;
+    const nonLivre=/non\s*livr/i.test(type);
+    if(iDoc>=0&&c[iDoc]&&!docNumber&&!nonLivre) docNumber=c[iDoc].trim();
+    const fam=(iFam>=0?c[iFam]:"").trim(), ray=(iRay>=0?c[iRay]:"").trim();
+    out.push({ article, ean:(iEan>=0?c[iEan]:"").trim().replace(/^0+(?=\d)/,""), designation:des,
+      marque:(iMar>=0?c[iMar]:"").trim(), attendu:toNum(iQte>=0?c[iQte]:0),
+      categorie:(fam||ray||"Autres"), comment:(iComm>=0?(c[iComm]||"").trim():""), nonLivre });
+  }
+  return { docNumber, supplier:"", lines:out };
+}
+function parseTXT(text){
+  const rows=text.split(/\r?\n/); const out=[]; let docNumber=""; let skipped=0;
+  const dateRe=/^\d{2}\/\d{2}\/\d{4}$/;
+  for(const raw of rows){
+    if(!raw.trim()) continue;
+    const c=raw.split("\t");
+    if(c.length<9||!dateRe.test((c[2]||"").trim())){ skipped++; continue; }
+    const article=(c[4]||"").trim(), des=(c[5]||"").trim(), qte=toNum(c[8]);
+    if(!article||!des){ skipped++; continue; }
+    if(c[3]) docNumber=(c[3]||"").trim();
+    out.push({ article, ean:"", designation:des, marque:"", attendu:qte, categorie:"Autres", label:(c[6]||"").trim() });
+  }
+  return { docNumber, supplier:"", lines:out, skipped };
+}
+function parsePDFLines(rowLines){
+  const out=[]; let supplier=""; let docNumber="";
+  const lineRe=/^(\d{2,7})\s+(.*\S)\s+(\d{8,13})\s+(\d+)\s+[\d.,]+\s+[\d.,]+\s*$/;
+  for(const L of rowLines){
+    if(!supplier&&/VITAFRAIS/i.test(L)) supplier="VITAFRAIS";
+    const mBL=L.match(/n[°º]\s*BL\s*:?\s*(\d+)/i); if(mBL) docNumber=mBL[1];
+    if(/^(Palette|Colis \d|Poids|Total|Distribution|Page|Commande|BIO :|DEM :)/i.test(L)) continue;
+    const m=L.match(lineRe); if(!m) continue;
+    out.push({ article:m[1], ean:m[3].replace(/^0+(?=\d)/,""), designation:m[2].replace(/\s+\d+$/,"").trim(), marque:"", attendu:parseInt(m[4],10), categorie:"Autres" });
+  }
+  return { docNumber, supplier, lines:out };
+}
+async function readPDF(buf){
+  const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+  let rowLines=[];
+  for(let p=1;p<=pdf.numPages;p++){
+    const page=await pdf.getPage(p); const tc=await page.getTextContent();
+    const rows={};
+    for(const it of tc.items){ const y=Math.round(it.transform[5]); (rows[y]=rows[y]||[]).push([it.transform[4],it.str]); }
+    Object.keys(rows).map(Number).sort((a,b)=>b-a).forEach(y=>{
+      const line=rows[y].sort((a,b)=>a[0]-b[0]).map(x=>x[1]).join(" ").replace(/\s+/g," ").trim();
+      if(line) rowLines.push(line);
+    });
+  }
+  return parsePDFLines(rowLines);
+}
+async function parseAnyFile(file){
+  const name=(file.name||"").toLowerCase();
+  if(name.endsWith(".pdf")){ const buf=await file.arrayBuffer(); return { ...(await readPDF(buf)), format:"PDF" }; }
+  const buf=await file.arrayBuffer();
+  let text; try{ text=new TextDecoder("windows-1252").decode(buf); }catch(e){ text=new TextDecoder("utf-8").decode(buf); }
+  const first=text.split(/\r?\n/).slice(0,5).join("\n");
+  if(name.endsWith(".csv")||first.includes(";")){
+    if(!first.includes(";")&&first.includes("\t")) return { ...parseTXT(text), format:"TXT" };
+    return { ...parseCSV(text), format:"CSV" };
+  }
+  return { ...parseTXT(text), format:"TXT" };
+}
+function fmtFr(iso){ if(!iso) return ""; const [y,m,d]=iso.split("-"); return d+"/"+m+"/"+y; }
+// Écrit un document parsé dans le Firebase du magasin
+async function loadToStore(code, parsed, {supplier,type,deliveryDate}){
+  const db=dbByStore[code]; if(!db) throw new Error("Magasin "+code+" non configuré");
+  const ref=db.ref("documents").push();
+  await ref.set({ docNumber:parsed.docNumber||"(sans n°)", supplier:(supplier||parsed.supplier||"").trim()||"(fournisseur ?)",
+    type:type||"BL", format:parsed.format, deliveryDate:fmtFr(deliveryDate)||"",
+    g5Key:parsed.g5Key||'ean',
+    createdAt:firebase.database.ServerValue.TIMESTAMP, lines:parsed.lines });
+}
+// Détermine la clé utilisée pour le .txt G5 : EAN si présent, sinon on propose le code article.
+function detectG5Key(parsed){
+  const hasEan=(parsed.lines||[]).some(l=>l.ean&&String(l.ean).trim().length>=6);
+  if(hasEan) return 'ean';
+  const hasArticle=(parsed.lines||[]).some(l=>l.article);
+  if(hasArticle){
+    const ok=confirm("⚠️ Pas d'EAN sur ce document.\n\nUtiliser le CODE ARTICLE pour le .txt à charger sur G5 ?\n\n(OK = oui, utiliser le code article · Annuler = laisser tel quel)");
+    return ok?'article':'ean';
+  }
+  return 'ean';
+}
+// Clé de ligne identique à l'app vendeur (pour retrouver la quantité réelle).
+function lineKeyOf(l,idx){ const a=(l.article||"").toString().trim(); return a?("a_"+a.replace(/[.#$/\[\]]/g,"_")):("i_"+idx); }
+// Construit le .txt G5 : col1 = EAN (ou code article), col2 = quantité réelle reçue. Séparateur tabulation.
+function buildG5Txt(rec, doc){
+  const key=(doc&&doc.g5Key)||'ean';
+  const active=((doc&&doc.lines)?doc.lines:[]).filter(l=>!l.nonLivre);
+  const out=[];
+  active.forEach((l,i)=>{
+    const st=(rec.lines||{})[lineKeyOf(l,i)];
+    const reel=st?(st.reel!=null?st.reel:l.attendu):l.attendu;
+    const code=key==='article'?(l.article||l.ean||''):(l.ean||l.article||'');
+    if(!code) return;
+    out.push(code+"\t"+reel);
+  });
+  return out.join("\r\n");
+}
+function downloadTxt(filename, content){
+  const blob=new Blob([content],{type:"text/plain;charset=utf-8"});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=filename; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),1500);
+}
+function dateShort(ts){ if(!ts) return ""; return new Date(ts).toLocaleDateString("fr-FR"); }
+
+/* ==================== ONGLET CHARGEMENT MULTI-MAGASIN ==================== */
+const multiFiles={}; // code -> { file, parsed, deliveryDate, supplier }
+function renderMulti(){
+  const el=document.getElementById("tab-multi");
+  let html='<p class="muted" style="margin-top:0">Une carte par magasin. Pour chacun : choisis le fichier BL et la date de livraison prévue, puis « Charger tous les magasins » en bas.</p><div class="grid">';
+  for(const s of STORES){
+    const ready=!!(s.firebaseConfig&&s.firebaseConfig.databaseURL);
+    const st=multiFiles[s.code]||{};
+    html+=`<div class="store-card ${ready?'':'nocfg'}">
+      <h3>${esc(s.label)} ${ready?'':'<span class="badge warn">non configuré</span>'}</h3>
+      ${ready?`
+        <div class="drop ${st.file?'has':''}" onclick="document.getElementById('mf_${s.code}').click()">
+          ${st.file?('✓ '+esc(st.file.name)):'📄 Choisir le fichier BL (CSV / TXT / PDF)'}
+        </div>
+        <input id="mf_${s.code}" type="file" accept=".csv,.txt,.pdf" style="display:none" onchange="onMultiFile('${s.code}',this.files[0])"/>
+        <div class="field"><label>Fournisseur</label><input style="width:100%" value="${esc(st.supplier||'')}" oninput="multiFiles['${s.code}']=Object.assign(multiFiles['${s.code}']||{},{supplier:this.value})" placeholder="Ex : Elibio, Biodis, Vitafrais…"/></div>
+        <div class="field"><label>Livraison prévue</label><input type="date" style="width:100%" value="${esc(st.deliveryDate||'')}" onchange="multiFiles['${s.code}']=Object.assign(multiFiles['${s.code}']||{},{deliveryDate:this.value})"/></div>
+        <div id="mnote_${s.code}">${st.parsed?parseNote(st.parsed):''}</div>
+      `:'<div class="muted">Renseigne sa config Firebase dans STORES pour l\'activer.</div>'}
+    </div>`;
+  }
+  html+='</div>';
+  el.innerHTML=html;
+  el.insertAdjacentHTML('beforeend',
+    `<div class="bar"><div class="muted" id="multiSummary"></div>
+     <button class="btn btn-green btn-lg" id="loadAllBtn" onclick="loadAll()">Charger tous les magasins</button></div>`);
+  updateMultiSummary();
+}
+function parseNote(p){
+  const g5 = p.g5Key==='article' ? ' · clé G5 : <b>code article</b>' : (p.g5Key==='ean' ? ' · clé G5 : EAN' : '');
+  return `<div class="parse-note">N° <b>${esc(p.docNumber||'—')}</b> · ${esc(p.format)} · ${p.lines.length} lignes${p.skipped?(' · '+p.skipped+' ignorée(s)'):''}${g5}</div>`;
+}
+async function onMultiFile(code,file){
+  if(!file) return;
+  multiFiles[code]=Object.assign(multiFiles[code]||{},{file});
+  const note=document.getElementById('mnote_'+code); if(note) note.innerHTML='<div class="parse-note">Lecture…</div>';
+  try{
+    const parsed=await parseAnyFile(file);
+    parsed.g5Key=detectG5Key(parsed);
+    multiFiles[code].parsed=parsed;
+    if(parsed.supplier && !multiFiles[code].supplier) multiFiles[code].supplier=parsed.supplier;
+    renderMulti();
+  }catch(e){ if(note) note.innerHTML='<div class="parse-note" style="color:#d32f2f">Erreur : '+esc(e.message)+'</div>'; }
+}
+function updateMultiSummary(){
+  const ready=Object.keys(multiFiles).filter(c=>multiFiles[c]&&multiFiles[c].parsed);
+  const el=document.getElementById('multiSummary'); if(el) el.textContent=ready.length+' magasin(s) prêt(s) à charger';
+  const btn=document.getElementById('loadAllBtn'); if(btn) btn.disabled=ready.length===0;
+}
+async function loadAll(){
+  const toLoad=Object.keys(multiFiles).filter(c=>multiFiles[c]&&multiFiles[c].parsed);
+  if(!toLoad.length) return;
+  if(!confirm('Charger '+toLoad.length+' magasin(s) ?')) return;
+  const btn=document.getElementById('loadAllBtn'); btn.disabled=true; btn.textContent='Chargement…';
+  let ok=0, errs=[];
+  for(const code of toLoad){
+    const m=multiFiles[code];
+    try{ await loadToStore(code, m.parsed, {supplier:m.supplier,type:"BL",deliveryDate:m.deliveryDate}); ok++; delete multiFiles[code]; }
+    catch(e){ errs.push(code+": "+e.message); }
+  }
+  renderMulti();
+  alert('✓ '+ok+' magasin(s) chargé(s)'+(errs.length?('\n\nErreurs :\n'+errs.join('\n')):''));
+}
+
+/* ==================== ONGLET CHARGEMENT SIMPLE ==================== */
+let simpleParsed=null;
+function renderSimple(){
+  const el=document.getElementById("tab-simple");
+  const opts=readyStores().map(s=>`<option value="${s.code}">${esc(s.label)}</option>`).join("");
+  el.innerHTML=`<div class="card">
+    <h2 style="margin-top:0">Charger un BL</h2>
+    <p class="muted">Choisis un fichier, puis indique pour quel magasin et la date de livraison prévue.</p>
+    <div class="drop" id="sdrop" onclick="document.getElementById('sfile').click()">📄 Choisir le fichier BL (CSV / TXT / PDF)</div>
+    <input id="sfile" type="file" accept=".csv,.txt,.pdf" style="display:none" onchange="onSimpleFile(this.files[0])"/>
+    <div id="snote" style="margin-top:10px"></div>
+    <div class="field" style="margin-top:12px"><label>Magasin</label><select id="sstore" style="width:100%">${opts}</select></div>
+    <div class="field"><label>Fournisseur</label><input id="ssup" style="width:100%" placeholder="Ex : Elibio, Biodis, Vitafrais…"/></div>
+    <div class="field"><label>Type</label><select id="stype" style="width:100%"><option>BL</option><option>Facture</option><option>Doc</option></select></div>
+    <div class="field"><label>Livraison prévue</label><input id="sdate" type="date" style="width:100%"/></div>
+    <button class="btn btn-primary btn-lg" id="sbtn" onclick="loadSimple()" disabled style="margin-top:8px">Charger dans le magasin</button>
+    <div id="smsg"></div>
+  </div>`;
+}
+async function onSimpleFile(file){
+  if(!file) return;
+  document.getElementById('sdrop').classList.add('has'); document.getElementById('sdrop').textContent='✓ '+file.name;
+  const note=document.getElementById('snote'); note.innerHTML='<div class="parse-note">Lecture…</div>';
+  try{
+    simpleParsed=await parseAnyFile(file);
+    simpleParsed.g5Key=detectG5Key(simpleParsed);
+    note.innerHTML=parseNote(simpleParsed);
+    if(simpleParsed.supplier) document.getElementById('ssup').value=simpleParsed.supplier;
+    document.getElementById('sbtn').disabled=false;
+  }catch(e){ note.innerHTML='<div class="parse-note" style="color:#d32f2f">Erreur : '+esc(e.message)+'</div>'; }
+}
+async function loadSimple(){
+  if(!simpleParsed) return;
+  const code=document.getElementById('sstore').value;
+  const supplier=document.getElementById('ssup').value;
+  const type=document.getElementById('stype').value;
+  const deliveryDate=document.getElementById('sdate').value;
+  const btn=document.getElementById('sbtn'); btn.disabled=true; btn.textContent='Chargement…';
+  try{
+    await loadToStore(code, simpleParsed, {supplier,type,deliveryDate});
+    document.getElementById('smsg').innerHTML='<div class="ok">✓ Chargé dans '+esc(code)+'. Visible immédiatement dans le magasin.</div>';
+    simpleParsed=null; document.getElementById('snote').innerHTML='';
+    document.getElementById('sdrop').classList.remove('has'); document.getElementById('sdrop').textContent='📄 Choisir le fichier BL (CSV / TXT / PDF)';
+  }catch(e){ document.getElementById('smsg').innerHTML='<div class="err">'+esc(e.message)+'</div>'; }
+  btn.disabled=false; btn.textContent='Charger dans le magasin';
+}
+
+/* ==================== ONGLET À RÉCEPTIONNER SUR G5 ==================== */
+function recsOf(code, filterFn){
+  const st=state[code]; if(!st) return [];
+  return Object.entries(st.receptions||{}).map(([id,r])=>({id,...r})).filter(filterFn);
+}
+function renderG5(){
+  const el=document.getElementById("tab-g5"); if(!el) return;
+  let total=0;
+  const html=STORES.map(s=>{
+    const st=state[s.code]; if(!st) return '';
+    const recs=recsOf(s.code, r=>r.status==="validated" && !r.g5Validated).sort((a,b)=>(b.validatedAt||0)-(a.validatedAt||0));
+    total+=recs.length;
+    if(!recs.length) return `<div class="store-card"><h3>${esc(s.label)}</h3><div class="muted">Rien à réceptionner sur G5.</div></div>`;
+    const rows=recs.map(r=>{ const nm=names[r.operatorCode]||"";
+      return `<div class="rec valid">
+        <div style="font-weight:800;font-size:14px">${esc(r.supplier||'?')} · ${esc(r.docNumber||'')}</div>
+        <div style="font-size:12px;color:#666;margin-top:2px">Validée ${esc(heure(r.validatedAt))} · ${esc(dateShort(r.validatedAt))}${nm?(' · '+esc(nm)):''}${r.ecartCount?(' · ⚠ '+r.ecartCount+' écart(s)'):''}</div>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button class="btn btn-primary" style="padding:8px 12px;font-size:13px" onclick="openDetail('${s.code}','${r.id}')">👁 Afficher la réception</button>
+          <button class="btn btn-green" style="padding:8px 12px;font-size:13px" onclick="markG5('${s.code}','${r.id}')">✓ Validé sur G5</button>
+        </div></div>`;
+    }).join("");
+    return `<div class="store-card"><h3>${esc(s.label)} <span class="badge info">${recs.length}</span></h3>${rows}</div>`;
+  }).join("");
+  el.innerHTML=`<p class="muted" style="margin-top:0">Réceptions validées par les vendeurs, à saisir dans G5 (trié par date, par magasin). « Afficher » = détail + photos + <b>.txt G5</b>. « Validé sur G5 » = fait → va dans les archives.</p><div class="live-grid">${html}</div>`;
+}
+async function markG5(code,id){
+  if(!confirm("Confirmer : cette réception a bien été saisie sur G5 ?\n\nElle passera dans « Réceptions archivées ».")) return;
+  const db=dbByStore[code]; if(!db) return;
+  try{ await db.ref("receptions/"+id).update({ g5Validated:true, g5ValidatedAt:firebase.database.ServerValue.TIMESTAMP }); }
+  catch(e){ alert("Erreur : "+e.message); }
+}
+function openDetail(code,id){
+  const st=state[code]; if(!st) return; const r=st.receptions[id]; if(!r) return;
+  const doc=st.docs[r.docId]||null;
+  const active=((doc&&doc.lines)?doc.lines:[]).filter(l=>!l.nonLivre);
+  const codeHdr=(doc&&doc.g5Key==='article')?'Code article':'EAN';
+  let rows="";
+  if(active.length){
+    rows=active.map((l,i)=>{ const s2=(r.lines||{})[lineKeyOf(l,i)]||{};
+      const stat=s2.status==="conforme"?'✓ conforme':s2.status==="nonrecu"?'✗ pas reçu':s2.status==="ecart"?'⚠ écart':'—';
+      const reel=s2.status?(s2.reel!=null?s2.reel:l.attendu):"";
+      const codeVal=(doc&&doc.g5Key==='article')?(l.article||''):(l.ean||l.article||'');
+      const bg=s2.status==="ecart"?' style="background:#fff3e0"':(s2.status==="nonrecu"?' style="background:#fdecea"':'');
+      return `<tr${bg}><td>${esc(codeVal)}</td><td>${esc(l.designation||'')}</td><td>${l.attendu}</td><td>${esc(stat)}</td><td>${reel}</td><td>${esc(s2.ecartText||'')}</td></tr>`;
+    }).join("");
+  } else {
+    rows=Object.values(r.lines||{}).map(s2=>`<tr><td>${esc(s2.ean||s2.article||'')}</td><td>${esc(s2.designation||'')}</td><td>${s2.attendu}</td><td>${esc(s2.status||'')}</td><td>${s2.reel!=null?s2.reel:''}</td><td>${esc(s2.ecartText||'')}</td></tr>`).join("");
+  }
+  const photos=Object.values(r.lines||{}).filter(s2=>s2.photoUrl).map(s2=>`<a href="${esc(s2.photoUrl)}" target="_blank" rel="noreferrer" class="badge info" style="text-decoration:none;padding:4px 10px;display:inline-block;margin:2px">📷 ${esc(s2.designation||'photo')}</a>`).join(" ");
+  const back=document.createElement("div"); back.className="modal-back";
+  back.innerHTML=`<div class="modal-box">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><h2 style="margin:0;font-size:17px">${esc(r.supplier||'')} · ${esc(r.docNumber||'')}</h2><button class="btn" style="background:#eef2f7" onclick="this.closest('.modal-back').remove()">Fermer</button></div>
+    <div class="muted" style="margin:4px 0 10px">${esc((STORES.find(x=>x.code===code)||{}).label||code)} · validée ${esc(heure(r.validatedAt))} ${esc(dateShort(r.validatedAt))}</div>
+    <div style="overflow:auto;max-height:52vh"><table><thead><tr><th>${codeHdr}</th><th>Désignation</th><th>Attendu</th><th>Statut</th><th>Reçu</th><th>Écart</th></tr></thead><tbody>${rows}</tbody></table></div>
+    ${photos?('<div style="margin-top:10px"><b>Photos :</b> '+photos+'</div>'):'<div class="muted" style="margin-top:8px">Aucune photo.</div>'}
+    <button class="btn btn-green btn-lg" style="margin-top:14px" onclick="dlG5('${code}','${id}')">⬇️ Télécharger le .txt G5</button>
+  </div>`;
+  back.onclick=(e)=>{ if(e.target===back) back.remove(); };
+  document.body.appendChild(back);
+}
+function dlG5(code,id){
+  const st=state[code]; const r=st.receptions[id]; const doc=st.docs[r.docId]||null;
+  const txt=buildG5Txt(r,doc);
+  if(!txt){ alert("Aucune ligne avec code (EAN / article) — impossible de générer le .txt."); return; }
+  downloadTxt("G5_"+code+"_"+(r.docNumber||"BL")+".txt", txt);
+}
+
+/* ==================== ONGLET RÉCEPTIONS ARCHIVÉES ==================== */
+let archSearch="";
+function renderArchives(){
+  const el=document.getElementById("tab-archives"); if(!el) return;
+  if(!el.dataset.built){
+    el.innerHTML=`<p class="muted" style="margin-top:0">Réceptions saisies sur G5, archivées (trié par date, par magasin). Recherche par n° BL ou fournisseur.</p>
+      <input id="archSearch" placeholder="🔎 Rechercher (n° BL, fournisseur…)" style="width:100%;max-width:440px;margin-bottom:12px" oninput="archSearch=this.value;renderArchivesList()"/>
+      <div id="archList"></div>`;
+    el.dataset.built="1";
+    const inp=document.getElementById("archSearch"); if(inp) inp.value=archSearch;
+  }
+  renderArchivesList();
+}
+function renderArchivesList(){
+  const box=document.getElementById("archList"); if(!box) return;
+  const q=norm(archSearch); let total=0;
+  const html=STORES.map(s=>{
+    const st=state[s.code]; if(!st) return '';
+    let recs=recsOf(s.code, r=>r.status==="validated" && r.g5Validated);
+    if(q) recs=recs.filter(r=> norm(r.docNumber).includes(q) || norm(r.supplier).includes(q));
+    recs.sort((a,b)=>((b.g5ValidatedAt||b.validatedAt||0)-(a.g5ValidatedAt||a.validatedAt||0)));
+    total+=recs.length;
+    if(!recs.length) return '';
+    const rows=recs.map(r=>{ const nm=names[r.operatorCode]||"";
+      return `<div class="rec valid"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center">
+        <div><div style="font-weight:800;font-size:14px">${esc(r.supplier||'?')} · ${esc(r.docNumber||'')}</div>
+        <div style="font-size:12px;color:#666">Sur G5 le ${esc(dateShort(r.g5ValidatedAt||r.validatedAt))} · reçue par ${esc(nm||'—')}${r.ecartCount?(' · ⚠ '+r.ecartCount):''}</div></div>
+        <button class="btn" style="background:#eef2f7;padding:8px 12px;font-size:13px" onclick="openDetail('${s.code}','${r.id}')">👁 Afficher</button></div></div>`;
+    }).join("");
+    return `<div class="store-card"><h3>${esc(s.label)} <span class="badge info">${recs.length}</span></h3>${rows}</div>`;
+  }).join("");
+  box.innerHTML= total ? `<div class="live-grid">${html}</div>` : ('<div class="muted">Aucune réception archivée'+(q?' pour cette recherche':'')+'.</div>');
+}
+
+/* ==================== ONGLET SUIVI LIVE ==================== */
+function queueNames(){
+  const need=new Set();
+  Object.values(state).forEach(st=>Object.values(st.receptions||{}).forEach(r=>{ if(r.operatorCode&&!(r.operatorCode in names)) need.add(r.operatorCode); }));
+  if(!need.size||pendingNames) return;
+  pendingNames=true;
+  fetch(APPS_SCRIPT_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},
+    body:JSON.stringify({action:"resolve-names",idToken:ID_TOKEN,codes:Array.from(need)})})
+    .then(r=>r.json()).then(j=>{ if(j&&j.names) Object.assign(names,j.names); pendingNames=false; renderSuivi(); })
+    .catch(()=>{ pendingNames=false; });
+}
+function activeCount(doc){ if(!doc||!doc.lines) return 0; return doc.lines.filter(l=>!l.nonLivre).length; }
+function pointed(recLines){ return Object.values(recLines||{}).filter(s=>s&&s.status).length; }
+function since(ts){ if(!ts) return ""; let s=Math.max(0,Math.floor((Date.now()-ts)/1000));
+  const h=Math.floor(s/3600); s%=3600; const m=Math.floor(s/60); s%=60;
+  return (h?h+"h":"")+String(m).padStart(h?2:1,"0")+"m"+String(s).padStart(2,"0"); }
+function heure(ts){ if(!ts) return ""; const d=new Date(ts); return d.toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"}); }
+function renderSuivi(){
+  const el=document.getElementById("tab-suivi");
+  if(el.classList.contains("hidden") && el.dataset.rendered) { /* still update timers if visible */ }
+  let totalDraft=0;
+  const html=STORES.map(s=>{
+    const st=state[s.code];
+    if(!st) return `<div class="store-card nocfg"><h3>${esc(s.label)}</h3><div class="muted">Non configuré</div></div>`;
+    const recs=Object.entries(st.receptions||{}).map(([id,r])=>({id,...r}));
+    const drafts=recs.filter(r=>r.status!=="validated").sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
+    const valids=recs.filter(r=>r.status==="validated").sort((a,b)=>(b.validatedAt||0)-(a.validatedAt||0)).slice(0,4);
+    totalDraft+=drafts.length;
+    const card=(r,isDraft)=>{ const doc=st.docs[r.docId]; const tot=activeCount(doc); const p=pointed(r.lines); const pct=tot?Math.round(p/tot*100):0;
+      const who=names[r.operatorCode]||"…";
+      return `<div class="rec ${isDraft?'draft':'valid'}">
+        <div style="display:flex;justify-content:space-between;gap:8px"><div><div style="font-weight:800;font-size:14px">${esc(r.supplier||'?')} · ${esc(r.docNumber||'')}</div>
+        <div style="font-size:12px;color:#1a4d2e;font-weight:700">👤 ${esc(who)}</div></div>
+        <span class="badge ${isDraft?'warn':'ok'}">${isDraft?'En cours':'Validée'}</span></div>
+        <div class="pbar"><div class="pfill" style="width:${pct}%"></div></div>
+        <div style="font-size:12px;color:#666;margin-top:4px">${p}/${tot||'?'} pointés (${pct}%)${isDraft?` · débutée ${esc(heure(r.createdAt))} · <span class="since">depuis ${esc(since(r.createdAt))}</span>`:` · validée ${esc(heure(r.validatedAt))}`}${r.ecartCount?` · ⚠ ${r.ecartCount} écart(s)`:''}</div></div>`;
+    };
+    const body=(drafts.length?drafts.map(r=>card(r,true)).join(""):'<div class="muted">Aucune réception en cours.</div>')
+      +(valids.length?'<div class="muted" style="margin-top:6px">Dernières validées</div>'+valids.map(r=>card(r,false)).join(""):"");
+    return `<div class="store-card"><h3>${esc(s.label)} <span class="badge info"><span class="dot"></span> LIVE</span></h3>${body}</div>`;
+  }).join("");
+  el.innerHTML=`<p class="muted" style="margin-top:0">${readyStores().length} magasin(s) connecté(s) · ${totalDraft} réception(s) en cours — mise à jour en temps réel.</p><div class="live-grid">${html}</div>`;
+  el.dataset.rendered="1";
+}
+</script>
+</body>
+</html>
